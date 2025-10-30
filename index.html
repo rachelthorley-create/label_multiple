@@ -17,7 +17,7 @@ canvas { border:1px solid #ccc; border-radius:8px; margin-top:20px; }
 .flex-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 button { margin-top:10px; padding:6px 12px; }
 #labelsContainer { margin-top:10px; }
-#allPreviews { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap:10px; margin-top:20px; }
+#allPreviews { display:flex; flex-direction:column; gap:38px; margin-top:20px; } /* 10mm spacing ~38px */
 </style>
 </head>
 <body>
@@ -28,7 +28,7 @@ Enter text for each line (all optional). Use advanced options for fonts, spacing
 </div>
 
 <form id="labelForm">
-<h3>Label 1 (Primary Label)</h3>
+<h3>Label 1 (Primary Label - this is used to design the layout of your labels. I suggest you use the one where you want the most text for this)</h3>
 <label>Line 1: <input id="line1" type="text" value="1st line"></label>
 <label>Line 2: <input id="line2" type="text" value="2nd line"></label>
 <label>Line 3: <input id="line3" type="text" value="3rd line"></label>
@@ -56,17 +56,17 @@ Enter text for each line (all optional). Use advanced options for fonts, spacing
   </div>
 
   <div class="slider-container">
-    <label>Spacing line1→line2: <span id="gap12Label">4</span> mm
+    <label>Spacing line1→line2: <span id="gap12Label">4</span>
       <input id="gap12" type="range" min="0" max="20" value="4">
     </label>
-    <label>Spacing line2→line3: <span id="gap23Label">3</span> mm
+    <label>Spacing line2→line3: <span id="gap23Label">3</span>
       <input id="gap23" type="range" min="0" max="20" value="3">
     </label>
     <label><input type="checkbox" id="linkGaps"> line2→line3 same as line1→line2</label>
   </div>
 
   <div class="slider-container">
-    <label>Shift all text up/down: <span id="textShiftLabel">0</span> mm
+    <label>Shift all text up/down: <span id="textShiftLabel">0</span>
       <input id="textShift" type="range" min="-20" max="20" value="0">
     </label>
   </div>
@@ -103,6 +103,7 @@ Enter text for each line (all optional). Use advanced options for fonts, spacing
 <div id="labelsContainer"></div>
 <div class="flex-row">
   <button type="button" id="previewAllBtn">Preview All Labels</button>
+  <button type="button" id="downloadAllBtn">Download Engraving Files</button>
 </div>
 <div id="allPreviews"></div>
 
@@ -253,30 +254,103 @@ function drawLabel(label){
     });
 }
 
-// Preview all labels in grid
+// Preview all labels vertically with 10mm spacing
 function previewAllLabels(){
     updateLabelsData();
     const allContainer=document.getElementById('allPreviews');
     allContainer.innerHTML='';
-    const label1={line1:line1Input.value,line2:line2Input.value,line3:line3Input.value};
-    drawLabel(label1); // main preview still shows first label
-    const canvasImg = document.createElement('canvas');
-    canvasImg.width=canvas.width;
-    canvasImg.height=canvas.height;
-    canvasImg.getContext('2d').drawImage(canvas,0,0);
-    const imgEl=document.createElement('img');
-    imgEl.src=canvas.toDataURL();
-    allContainer.appendChild(imgEl);
+    const spacing = mmToPx(10);
 
+    // Label 1
+    const label1={line1:line1Input.value,line2:line2Input.value,line3:line3Input.value};
+    drawLabel(label1);
+    const img1 = document.createElement('canvas');
+    img1.width=canvas.width;
+    img1.height=canvas.height;
+    img1.getContext('2d').drawImage(canvas,0,0);
+    allContainer.appendChild(img1);
+
+    let yOffset=0;
     labels.forEach(l=>{
         drawLabel(l);
         const img = document.createElement('canvas');
-        img.width=canvas.width; img.height=canvas.height;
+        img.width=canvas.width;
+        img.height=canvas.height;
         img.getContext('2d').drawImage(canvas,0,0);
-        const imgTag=document.createElement('img');
-        imgTag.src=img.toDataURL();
-        allContainer.appendChild(imgTag);
+        allContainer.appendChild(img);
+        yOffset+=canvas.height + spacing;
     });
+}
+
+// Generate SVG for a label
+function generateSVG(label){
+    const w = mmToPx(100);
+    const h = mmToPx(75);
+    const cornerR = mmToPx(2);
+    const circleR = mmToPx(3);
+    const circleTop = mmToPx(6);
+    const margin = mmToPx(5);
+    const topMarginExtra = mmToPx(2);
+    const textShift = mmToPx(parseInt(textShiftSlider.value));
+
+    const size1=parseInt(largeSlider.value);
+    const size2=parseInt(smallSlider.value);
+    const size3=link23Checkbox.checked? size2:parseInt(line3Slider.value);
+
+    const gap12=mmToPx(parseInt(gap12Slider.value));
+    const gap23=linkGapsCheckbox.checked? gap12: mmToPx(parseInt(gap23Slider.value));
+
+    const lines=[
+      {text:label.line1,size:size1,font:font1Select.value,bold:bold1.checked,italic:italic1.checked},
+      {text:label.line2,size:size2,font:font2Select.value,bold:bold2.checked,italic:italic2.checked},
+      {text:label.line3,size:size3,font:font3Select.value,bold:bold3.checked,italic:italic3.checked}
+    ].filter(l=>l.text!=='');
+    
+    const topTextY = circleTop + circleR + topMarginExtra + textShift;
+    const bottomTextY = h - margin;
+    let totalHeight=0;
+    lines.forEach((l,i)=>{totalHeight+=l.size;if(i===0&&lines.length>1) totalHeight+=gap12;if(i===1&&lines.length>2) totalHeight+=gap23;});
+    let currentY = topTextY + (bottomTextY - topTextY - totalHeight)/2 + (lines[0]?.size||0)*0.75;
+
+    let svgParts = [];
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">`);
+    svgParts.push(`<rect x="0" y="0" width="${w}" height="${h}" rx="${cornerR}" ry="${cornerR}" fill="white" stroke="red" stroke-width="1"/>`);
+    svgParts.push(`<circle cx="${w/2}" cy="${circleTop+circleR}" r="${circleR}" fill="none" stroke="red" stroke-width="1"/>`);
+
+    lines.forEach((line,i)=>{
+      let style='';
+      if(line.bold) style+='bold ';
+      if(line.italic) style+='italic ';
+      style+=line.size+'px '+line.font;
+      const tempCanvas=document.createElement('canvas');
+      const tempCtx=tempCanvas.getContext('2d');
+      tempCtx.font=style;
+      const maxWidth=w-2*margin;
+      const textWidth=tempCtx.measureText(line.text).width;
+      const scaleX=Math.min(1,maxWidth/textWidth);
+      const transform=scaleX<1? ` transform="translate(${w/2},${currentY}) scale(${scaleX},1)"` : '';
+      const x=scaleX<1? 0 : w/2;
+      const y=scaleX<1? 0 : currentY;
+      svgParts.push(`<text x="${x}" y="${y}" font-family="${line.font}" font-size="${line.size}" text-anchor="middle" fill="blue" font-weight="${line.bold?'bold':'normal'}" font-style="${line.italic?'italic':'normal'}"${transform}>${line.text}</text>`);
+      if(i===0&&lines.length>1) currentY+=gap12+lines[1].size;
+      if(i===1&&lines.length>2) currentY+=gap23+lines[2].size;
+    });
+    svgParts.push('</svg>');
+    return svgParts.join('\n');
+}
+
+// Download all labels as ZIP
+function downloadAllSVGs(){
+    updateLabelsData();
+    const zip=new JSZip();
+    const allLabels=[{line1:line1Input.value,line2:line2Input.value,line3:line3Input.value}, ...labels];
+    allLabels.forEach(label=>{
+        const svg=generateSVG(label);
+        let filename=[label.line1,label.line2,label.line3].filter(t=>t!=='').join('_')+'.svg';
+        filename=filename.replace(/[\/\\?%*:|"<> ]/g,'_');
+        zip.file(filename,svg);
+    });
+    zip.generateAsync({type:'blob'}).then(content=>saveAs(content,'labels.zip'));
 }
 
 // Update slider labels
@@ -296,6 +370,7 @@ linkGapsCheckbox.addEventListener('change',()=>drawLabel({line1:line1Input.value
 [font1Select,font2Select,font3Select,bold1,bold2,bold3,italic1,italic2,italic3].forEach(el=>el.addEventListener('change',()=>drawLabel({line1:line1Input.value,line2:line2Input.value,line3:line3Input.value})));
 document.getElementById('labelForm').addEventListener('submit', e=>{e.preventDefault(); drawLabel({line1:line1Input.value,line2:line2Input.value,line3:line3Input.value});});
 document.getElementById('previewAllBtn').addEventListener('click', previewAllLabels);
+document.getElementById('downloadAllBtn').addEventListener('click', downloadAllSVGs);
 
 // Initial render
 updateLabelsDisplay();

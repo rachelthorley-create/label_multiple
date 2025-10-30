@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Label Generator</title>
+<style>
+body { font-family: Arial, sans-serif; margin:20px; display:flex; flex-direction:column; align-items:center; }
+h2 { margin-bottom:5px; }
+#instructions { max-width:600px; text-align:center; margin-bottom:20px; }
+form { margin-bottom:20px; width:100%; max-width:600px; }
+label { display:block; margin-bottom:8px; }
+input[type="text"], input[type="number"] { width:100%; padding:4px; }
+.slider-container { margin:8px 0; }
+.advanced { display:none; border:1px solid #ccc; padding:10px; margin-top:10px; border-radius:8px; }
+canvas { border:1px solid #ccc; border-radius:8px; margin-top:20px; }
+.flex-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+button { margin-top:10px; padding:6px 12px; }
+#labelsContainer { margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h2>Interactive Label Generator</h2>
+<div id="instructions">
+Enter text for each line (all optional). Use advanced options for fonts, spacing, and sizes. You can create multiple labels.
+</div>
+
+<form id="labelForm">
+<div class="slider-container">
+<label>Large text size (line 1): <span id="largeSizeLabel">54</span>
+<input id="largeSize" type="range" min="20" max="100" value="54">
+</label>
+</div>
+<div class="slider-container">
+<label>Small text size (line 2): <span id="smallSizeLabel">27</span>
+<input id="smallSize" type="range" min="10" max="60" value="27">
+</label>
+</div>
+
+<button type="button" id="toggleAdvanced">Show Advanced Options</button>
+
+<div class="advanced" id="advancedOptions">
+  <div class="slider-container">
+    <label>Line 3 text size: <span id="line3SizeLabel">27</span>
+      <input id="line3Size" type="range" min="10" max="60" value="27">
+    </label>
+    <label><input type="checkbox" id="link23" checked> Same as line 2 size</label>
+  </div>
+
+  <div class="slider-container">
+    <label>Spacing line1→line2: <span id="gap12Label">4</span> mm
+      <input id="gap12" type="range" min="0" max="20" value="4">
+    </label>
+    <label>Spacing line2→line3: <span id="gap23Label">3</span> mm
+      <input id="gap23" type="range" min="0" max="20" value="3">
+    </label>
+    <label><input type="checkbox" id="linkGaps"> line2→line3 same as line1→line2</label>
+  </div>
+
+  <div class="slider-container">
+    <label>Shift all text up/down: <span id="textShiftLabel">0</span> mm
+      <input id="textShift" type="range" min="-20" max="20" value="0">
+    </label>
+  </div>
+
+  <div class="slider-container flex-row">
+    <label>Line 1 font: 
+      <select id="font1"><option>Arial</option><option>Verdana</option><option>Courier New</option></select>
+    </label>
+    <label><input type="checkbox" id="bold1" checked> Bold</label>
+    <label><input type="checkbox" id="italic1"> Italic</label>
+  </div>
+  <div class="slider-container flex-row">
+    <label>Line 2 font: 
+      <select id="font2"><option>Arial</option><option>Verdana</option><option>Courier New</option></select>
+    </label>
+    <label><input type="checkbox" id="bold2"> Bold</label>
+    <label><input type="checkbox" id="italic2" checked> Italic</label>
+  </div>
+  <div class="slider-container flex-row">
+    <label>Line 3 font: 
+      <select id="font3"><option>Arial</option><option>Verdana</option><option>Courier New</option></select>
+    </label>
+    <label><input type="checkbox" id="bold3"> Bold</label>
+    <label><input type="checkbox" id="italic3"> Italic</label>
+  </div>
+</div>
+
+<h3>Multiple Labels</h3>
+<label>Number of labels: <input id="numLabels" type="number" min="1" value="1"></label>
+<div id="labelsContainer"></div>
+<div class="flex-row">
+  <label>Preview Label #: <input id="previewIndex" type="number" min="1" value="1" style="width:50px;"></label>
+  <button type="button" id="previewLabelBtn">Preview Label</button>
+</div>
+
+<button type="submit">Update Text</button>
+<button type="button" id="downloadAllBtn">Download All Labels (ZIP)</button>
+</form>
+
+<canvas id="labelCanvas" width="378" height="283"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+const mmToPx = mm=>mm*3.78;
+const canvas=document.getElementById('labelCanvas');
+const ctx=canvas.getContext('2d');
+
+const largeSlider=document.getElementById('largeSize');
+const smallSlider=document.getElementById('smallSize');
+const line3Slider=document.getElementById('line3Size');
+const link23Checkbox=document.getElementById('link23');
+const gap12Slider=document.getElementById('gap12');
+const gap23Slider=document.getElementById('gap23');
+const linkGapsCheckbox=document.getElementById('linkGaps');
+const textShiftSlider=document.getElementById('textShift');
+const font1Select=document.getElementById('font1');
+const font2Select=document.getElementById('font2');
+const font3Select=document.getElementById('font3');
+const bold1=document.getElementById('bold1');
+const italic1=document.getElementById('italic1');
+const bold2=document.getElementById('bold2');
+const italic2=document.getElementById('italic2');
+const bold3=document.getElementById('bold3');
+const italic3=document.getElementById('italic3');
+
+const largeLabel=document.getElementById('largeSizeLabel');
+const smallLabel=document.getElementById('smallSizeLabel');
+const line3Label=document.getElementById('line3SizeLabel');
+const gap12Label=document.getElementById('gap12Label');
+const gap23Label=document.getElementById('gap23Label');
+const textShiftLabel=document.getElementById('textShiftLabel');
+
+const toggleAdvancedBtn=document.getElementById('toggleAdvanced');
+const advancedDiv=document.getElementById('advancedOptions');
+
+toggleAdvancedBtn.addEventListener('click',()=>{
+  if(advancedDiv.style.display==='none'){advancedDiv.style.display='block'; toggleAdvancedBtn.textContent='Hide Advanced Options';}
+  else{advancedDiv.style.display='none'; toggleAdvancedBtn.textContent='Show Advanced Options';}
+});
+
+// Multiple labels data
+let labels=[];
+
+function renderLabelInputs(){
+    const n = parseInt(document.getElementById('numLabels').value);
+    const container=document.getElementById('labelsContainer');
+    container.innerHTML='';
+    labels=[];
+    for(let i=0;i<n;i++){
+        const div=document.createElement('div');
+        div.innerHTML=`<h4>Label ${i+1}</h4>
+        <label>Line 1: <input class="line1multi" value="1st line"></label>
+        <label>Line 2: <input class="line2multi" value="2nd line"></label>
+        <label>Line 3: <input class="line3multi" value="3rd line"></label>`;
+        container.appendChild(div);
+        labels.push({line1:'1st line', line2:'2nd line', line3:'3rd line'});
+    }
+}
+document.getElementById('numLabels').addEventListener('change',renderLabelInputs);
+renderLabelInputs();
+
+function updateLabelsData(){
+    const line1s=document.querySelectorAll('.line1multi');
+    const line2s=document.querySelectorAll('.line2multi');
+    const line3s=document.querySelectorAll('.line3multi');
+    labels.forEach((l,i)=>{
+        l.line1=line1s[i].value;
+        l.line2=line2s[i].value;
+        l.line3=line3s[i].value;
+    });
+}
+
+// Draw PNG preview for a single label
+function updateCanvasPreview(labelIdx=0){
+    const label = labels[labelIdx] || {line1:'', line2:'', line3:''};
+    const w = mmToPx(100);
+    const h = mmToPx(75);
+    const cornerR = mmToPx(2);
+    const circleR = mmToPx(3);
+    const circleTop = mmToPx(6);
+    const margin = mmToPx(5);
+    const topMarginExtra = mmToPx(2);
+    const textShift = mmToPx(parseInt(textShiftSlider.value));
+
+    const size1=parseInt(largeSlider.value);
+    const size2=parseInt(smallSlider.value);
+    const size3=link23Checkbox.checked? size2:parseInt(line3Slider.value);
+
+    const gap12=mmToPx(parseInt(gap12Slider.value));
+    const gap23=linkGapsCheckbox.checked? gap12: mmToPx(parseInt(gap23Slider.value));
+
+    const lines=[
+      {text:label.line1,size:size1,font:font1Select.value,bold:bold1.checked,italic:italic1.checked},
+      {text:label.line2,size:size2,font:font2Select.value,bold:bold2.checked,italic:italic2.checked},
+      {text:label.line3,size:size3,font:font3Select.value,bold:bold3.checked,italic:italic3.checked}
+    ].filter(l=>l.text!=='');
+    
+    const topTextY = circleTop + circleR + topMarginExtra + textShift;
+    const bottomTextY = h - margin;
+    let totalHeight=0;
+    lines.forEach((l,i)=>{totalHeight+=l.size;if(i===0&&lines.length>1) totalHeight+=gap12;if(i===1&&lines.length>2) totalHeight+=gap23;});
+    let currentY = topTextY + (bottomTextY - topTextY - totalHeight)/2 + (lines[0]?.size||0)*0.75;
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='black';
+    ctx.beginPath();
+    ctx.moveTo(cornerR,0);
+    ctx.lineTo(w-cornerR,0);
+    ctx.quadraticCurveTo(w,0,w,cornerR);
+    ctx.lineTo(w,h-cornerR);
+    ctx.quadraticCurveTo(w,h,w-cornerR,h);
+    ctx.lineTo(cornerR,h);
+    ctx.quadraticCurveTo(0,h,0,h-cornerR);
+    ctx.lineTo(0,cornerR);
+    ctx.quadraticCurveTo(0,0,cornerR,0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(w/2, circleTop+circleR, circleR,0,Math.PI*2);
+    ctx.fillStyle='white';
+    ctx.fill();
+
+    ctx.textAlign='center';
+    ctx.fillStyle='white';
+    lines.forEach((line,i)=>{
+      let style='';
+      if(line.bold) style+='bold ';
+      if(line.italic) style+='italic ';
+      style+=line.size+'px '+line.font;
+      ctx.font=style;
+      const maxWidth=w-2*margin;
+      const textWidth=ctx.measureText(line.text).width;
+      const scaleX=Math.min(1,maxWidth/textWidth);
+      ctx.save();
+      ctx.translate(w/2,currentY);
+      ctx.scale(scaleX,1);
+      ctx.fillText(line.text,0,0);
+      ctx.restore();
+      if(i===0&&lines.length>1) currentY+=gap12+lines[1].size;
+      if(i===1&&lines.length>2) currentY+=gap23+lines[2].size;
+    });
+}
+
+// Generate SVG for one label (matching PNG)
+function generateSVGEngraving(label){
+    const w = mmToPx(100);
+    const h = mmToPx(75);
+    const cornerR = mmToPx(2);
+    const circleR = mmToPx(3);
+    const circleTop = mmToPx(6);
+    const margin = mmToPx(5);
+    const topMarginExtra = mmToPx(2);
+    const textShift = mmToPx(parseInt(textShiftSlider.value));
+
+    const size1=parseInt(largeSlider.value);
+    const size2=parseInt(smallSlider.value);
+    const size3=link23Checkbox.checked? size2:parseInt(line3Slider.value);
+
+    const gap12=mmToPx(parseInt(gap12Slider.value));
+    const gap23=linkGapsCheckbox.checked? gap12: mmToPx(parseInt(gap23Slider.value));
+
+    const lines=[
+      {text:label.line1,size:size1,font:font1Select.value,bold:bold1.checked,italic:italic1.checked},
+      {text:label.line2,size:size2,font:font2Select.value,bold:bold2.checked,italic:italic2.checked},
+      {text:label.line3,size:size3,font:font3Select.value,bold:bold3.checked,italic:italic3.checked}
+    ].filter(l=>l.text!=='');
+    
+    const topTextY = circleTop + circleR + topMarginExtra + textShift;
+    const bottomTextY = h - margin;
+    let totalHeight=0;
+    lines.forEach((l,i)=>{totalHeight+=l.size;if(i===0&&lines.length>1) totalHeight+=gap12;if(i===1&&lines.length>2) totalHeight+=gap23;});
+    let currentY = topTextY + (bottomTextY - topTextY - totalHeight)/2 + (lines[0]?.size||0)*0.75;
+
+    let svgParts = [];
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">`);
+    svgParts.push(`<rect x="0" y="0" width="${w}" height="${h}" rx="${cornerR}" ry="${cornerR}" fill="white" stroke="red" stroke-width="1"/>`);
+    svgParts.push(`<circle cx="${w/2}" cy="${circleTop+circleR}" r="${circleR}" fill="none" stroke="red" stroke-width="1"/>`);
+
+    lines.forEach((line,i)=>{
+      const tempCanvas=document.createElement('canvas');
+      const tempCtx=tempCanvas.getContext('2d');
+      let fontStyle='';
+      if(line.bold) fontStyle+='bold ';
+      if(line.italic) fontStyle+='italic ';
+      fontStyle+=line.size+'px '+line.font;
+      tempCtx.font=fontStyle;
+      const maxWidth=w-2*margin;
+      const textWidth=tempCtx.measureText(line.text).width;
+      const scaleX=Math.min(1,maxWidth/textWidth);
+      const transform=scaleX<1? ` transform="translate(${w/2},${currentY}) scale(${scaleX},1)"` : '';
+      const x=scaleX<1? 0 : w/2;
+      const y=scaleX<1? 0 : currentY;
+
+      svgParts.push(`<text x="${x}" y="${y}" font-family="${line.font}" font-size="${line.size}" text-anchor="middle" fill="blue" font-weight="${line.bold?'bold':'normal'}" font-style="${line.italic?'italic':'normal'}"${transform}>${line.text}</text>`);
+
+      if(i===0&&lines.length>1) currentY+=gap12+lines[1].size;
+      if(i===1&&lines.length>2) currentY+=gap23+lines[2].size;
+    });
+    svgParts.push('</svg>');
+    return svgParts.join('\n');
+}
+
+// Update labels display
+function updateLabelsDisplay(){
+    largeLabel.textContent=largeSlider.value;
+    smallLabel.textContent=smallSlider.value;
+    line3Label.textContent=line3Slider.value;
+    gap12Label.textContent=gap12Slider.value;
+    gap23Label.textContent=gap23Slider.value;
+    textShiftLabel.textContent=textShiftSlider.value;
+}
+
+// Event listeners
+[largeSlider,smallSlider,line3Slider,gap12Slider,gap23Slider,textShiftSlider].forEach(el=>el.addEventListener('input',()=>{updateLabelsDisplay(); updateCanvasPreview();}));
+link23Checkbox.addEventListener('change',()=>updateCanvasPreview());
+linkGapsCheckbox.addEventListener('change',()=>updateCanvasPreview());
+[font1Select,font2Select,font3Select,bold1,bold2,bold3,italic1,italic2,italic3].forEach(el=>el.addEventListener('change',()=>updateCanvasPreview()));
+document.getElementById('labelForm').addEventListener('submit', e=>{e.preventDefault(); updateLabelsData(); updateCanvasPreview(parseInt(document.getElementById('previewIndex').value)-1);});
+
+// Preview label
+document.getElementById('previewLabelBtn').addEventListener('click',()=>{
+    updateLabelsData();
+    const idx = parseInt(document.getElementById('previewIndex').value)-1;
+    if(idx>=0 && idx<labels.length){
+        updateCanvasPreview(idx);
+    }
+});
+
+// Download all labels as ZIP
+document.getElementById('downloadAllBtn').addEventListener('click',()=>{
+    updateLabelsData();
+    const zip=new JSZip();
+    labels.forEach(label=>{
+        const svg=generateSVGEngraving(label);
+        let filename=[label.line1,label.line2,label.line3].filter(t=>t!=='').join('_')+'.svg';
+        filename=filename.replace(/[\/\\?%*:|"<> ]/g,'_');
+        zip.file(filename,svg);
+    });
+    zip.generateAsync({type:'blob'}).then(content=>saveAs(content,'labels.zip'));
+});
+
+// Initial render
+updateLabelsDisplay();
+updateCanvasPreview();
+
+</script>
+</body>
+</html>
